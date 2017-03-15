@@ -6,7 +6,6 @@ import (
 	"syscall"
 
 	"./libs"
-	"fmt"
 )
 
 func main(){
@@ -14,7 +13,6 @@ func main(){
 	daemon  := libs.Daemon{Config:config}
 	status  := daemon.Run()
 
-	fmt.Print(status)
 	if status  == false {
 		return
 	}

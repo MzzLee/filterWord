@@ -115,7 +115,7 @@ func (node *Node) AcFind (context string) string {
 		p = p.Child[uint16(value)]
 		if p == nil{
 			p = node
-			start = index
+			start = index + 1
 		}
 		temp = p
 		for {
