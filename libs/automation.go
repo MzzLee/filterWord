@@ -14,11 +14,6 @@ type Node struct {
 	Count int
 }
 
-var (
-	head int
-	tail int
-)
-
 func (node *Node) Insert (keyword string){
 	var p *Node
 	p = node
@@ -55,6 +50,10 @@ func (node *Node) ReadLine (fileName string) error {
 }
 
 func (node *Node) BuildAcAutomation (){
+	var (
+		head int
+		tail int
+	)
 	fmt.Println("Build ac automation ......")
 	var q  = make(map[int]*Node)
 	node.Fail = nil
@@ -108,6 +107,7 @@ func (node *Node) AcFind (context string) string {
 		for{
 			if p.Child[uint16(value)] == nil && p != node {
 				p = p.Fail
+				start = index
 			}else{
 				break
 			}
@@ -115,7 +115,7 @@ func (node *Node) AcFind (context string) string {
 		p = p.Child[uint16(value)]
 		if p == nil{
 			p = node
-			start = index + 1
+			start = index
 		}
 		temp = p
 		for {

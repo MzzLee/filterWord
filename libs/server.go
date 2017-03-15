@@ -16,6 +16,8 @@ const (
 )
 
 const (
+	DefaultPort  = 9901
+	DefaultBind  = "127.0.0.1"
 	HeaderPrefix = "[Header]"
 	HeaderPrefixLen = 8
 	HeaderSuffix = "[/Header]"
@@ -40,7 +42,17 @@ var _serverInstance *Server
 
 func Create(ac *Node, config *Conf) *Server{
 	if _serverInstance == nil {
+
 		_serverInstance = new(Server)
+
+		if config.Port == 0 {
+			config.Port = DefaultPort
+		}
+
+		if config.Bind == ""{
+			config.Bind = _serverInstance.getRealIP()
+		}
+
 		_serverInstance.Ac = ac
 		_serverInstance.Host = config.Bind
 		_serverInstance.Port = config.Port
@@ -50,14 +62,31 @@ func Create(ac *Node, config *Conf) *Server{
 	return _serverInstance
 }
 
-func (server *Server)Start(){
+func (server *Server) getRealIP() string{
+	ips, err :=  net.InterfaceAddrs()
+	if err != nil{
+		log.Fatalf("Error %s \n", err.Error())
+		os.Exit(1)
+	}
+
+	for _, address := range ips {
+		if ipNet, ok := address.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
+			if ipNet.IP.To4() != nil {
+				return ipNet.IP.String()
+			}
+		}
+	}
+	return DefaultBind
+}
+
+func (server *Server) Start (){
 	listenFD, err := net.Listen(server.Protocol, server.Host + ":" + strconv.Itoa(server.Port))
 	if err !=nil {
 		log.Fatalf("Error %s \n", err.Error())
 		os.Exit(1)
 	}
 
-	fmt.Println("Server start successed !")
+	fmt.Println("Server start successed! You can \"Ctrl + c\" quit!")
 
 	defer listenFD.Close()
 
