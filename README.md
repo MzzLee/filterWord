@@ -11,6 +11,6 @@ golang filter sensltive word
   * run(执行) ./filterWord
     * start : 开启
     * stop : 关闭
-    * restart 重启
-    * -c 置顶配置文件
-    * -key 置顶关键字文件
+    * restart : 重启
+    * -c 配置文件
+    * -key 配置关键字文件

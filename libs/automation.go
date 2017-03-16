@@ -38,7 +38,9 @@ func (node *Node) ReadLine (fileName string) error {
 	for {
 		line, err := buf.ReadString('\n')
 		line = strings.TrimSpace(line)
-		node.Insert(line)
+		if len(line) > 0{
+			node.Insert(line)
+		}
 		if err != nil {
 			if err == io.EOF {
 				return nil

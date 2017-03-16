@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 )
 const (
 	StatusOK = 200
@@ -16,14 +17,19 @@ const (
 )
 
 const (
-	DefaultPort  = 9901
-	DefaultBind  = "127.0.0.1"
-	HeaderPrefix = "[Header]"
+	DefaultPort 	= 9901
+	DefaultBind  	= "127.0.0.1"
+	HeaderPrefix 	= "[header]"
 	HeaderPrefixLen = 8
-	HeaderSuffix = "[/Header]"
+	HeaderSuffix	= "[/header]"
 	HeaderSuffixLen = 9
-	HeaderMLen   = 1024
+	ReaderMLen   	= 1024
 )
+
+type Request struct {
+	ContentLength int `json:"content-length"`
+	IsAlive int `json:"is-alive"`
+}
 
 type Response struct{
 	Status uint16 `json:"status"`
@@ -100,59 +106,73 @@ func (server *Server) Start (){
 }
 
 func (server *Server) receive (conn net.Conn){
-	tmpBuf := make([]byte, 0)
+	tmpBuffer := make([]byte, 0)
 
 	defer conn.Close()
 
-	responseStatus := 0
-	buffer := make([]byte, HeaderMLen)
-	requestLength := 0
-	runTimes :=0
+	readBuffer := make([]byte, ReaderMLen)
+	request    := Request{0,0}
 
-	for{
-		n, err := conn.Read(buffer)
 
-		if err != nil {
-			log.Fatalln("conn closed")
+	for {
+		n, err := conn.Read(readBuffer)
+		if err != nil || err == io.EOF {
 			return
 		}
-		tmpBuf = append(tmpBuf, buffer[:n]...)
-		//取响应头
-		if requestLength == 0 && strings.HasPrefix(string(tmpBuf), HeaderPrefix){
-			if suffix := strings.Index(string(tmpBuf), HeaderSuffix); suffix > 0 {
-				requestLength, _ = strconv.Atoi(string(tmpBuf[HeaderPrefixLen:suffix]))
-				if requestLength == 0{
-					responseStatus = StatusRequestError
-					break
-				}
-				tmpBuf = tmpBuf[suffix + HeaderSuffixLen:]
-			}
 
-		}else{
-			if runTimes == 0{
-				responseStatus = StatusRequestError
+		tmpBuffer = append(tmpBuffer, readBuffer[:n]...)
+
+		var sendBuffer []byte
+		for {
+			if len(tmpBuffer) == 0 {
 				break
 			}
-		}
 
-		runTimes++
+			if request.ContentLength == 0{
+				tmpBuffer, request = server.getHeader(tmpBuffer)
+				if request.ContentLength == 0 {
+					server.Response(conn, uint16(StatusRequestError), "")
+					return
+				}
+			}
 
-		if requestLength !=0 && len(tmpBuf) >= requestLength{
-			responseStatus = StatusOK
-			break
+			if request.ContentLength > 0 && len(tmpBuffer) >= request.ContentLength{
+
+				responseStatus := StatusOK
+				sendBuffer = tmpBuffer[0:request.ContentLength]
+
+				tmpBuffer  = tmpBuffer[request.ContentLength:]
+				responseBody, err := server.Work(sendBuffer)
+				if err != nil {
+					responseStatus = StatusRequestError
+				}
+
+				server.Response(conn, uint16(responseStatus), responseBody)
+				if request.IsAlive > 0 {
+					request.ContentLength = 0
+				}else{
+					return
+				}
+
+			}else{
+				break
+			}
+
 		}
 	}
-	var responseBody string
-	var err error
-	if responseStatus == StatusOK{
-		responseBody, err = server.Work(tmpBuf)
-		if err != nil{
-			responseStatus = StatusRequestError
-		}
-	}
-
-	server.Response(conn, uint16(responseStatus), responseBody)
 	return
+}
+
+func (server *Server) getHeader (tmpBuffer []byte) ([]byte, Request){
+	var request Request
+	if strings.HasPrefix(string(tmpBuffer), HeaderPrefix) {
+		suffix := strings.Index(string(tmpBuffer), HeaderSuffix)
+		if suffix > 0 {
+			json.Unmarshal(tmpBuffer[HeaderPrefixLen:suffix], &request)
+			tmpBuffer = tmpBuffer[suffix+HeaderSuffixLen:]
+		}
+	}
+	return tmpBuffer, request
 }
 
 
