@@ -2,7 +2,6 @@ package libs
 
 import (
 	"net"
-	"log"
 	"os"
 	"strings"
 	"strconv"
@@ -45,7 +44,7 @@ type Server struct {
 
 var (
 	_serverInstance *Server
-	_logger * log.Logger
+	_logger *GLogger
 )
 
 func CreateServer() *Server{
@@ -60,7 +59,7 @@ func CreateServer() *Server{
 func (server *Server) getRealIP () string{
 	ips, err :=  net.InterfaceAddrs()
 	if err != nil{
-		_logger.Fatalln("Error %s \n", err.Error())
+		_logger.Fatal(err.Error())
 		os.Exit(1)
 	}
 
@@ -89,14 +88,14 @@ func (server *Server) Init () *Server{
 	server.Port = config.Port
 	server.Protocol = config.Protocol
 
-	_logger, _ = InitLogger(config.LogFile)
+	_logger, _ = InitLogger(config.LogFile, config.Env)
 	return server
 }
 
 func (server *Server) Start (){
 	listenFD, err := net.Listen(server.Protocol, server.Host + ":" + strconv.Itoa(server.Port))
 	if err !=nil {
-		_logger.Fatalln(err.Error())
+		_logger.Fatal(err.Error())
 		fmt.Println(err.Error())
 		os.Exit(1)
 	}
@@ -141,7 +140,7 @@ func (server *Server) receive (conn net.Conn){
 				tmpBuffer, request, err = server.getHeader(tmpBuffer)
 				if err != nil {
 					server.Response(conn, uint16(StatusRequestError), err.Error())
-					_logger.Println("Request Header Error", err.Error())
+					_logger.Warning("Request Header Error : ", err.Error())
 					return
 				}
 			}
@@ -196,7 +195,7 @@ func (server *Server) Response (conn net.Conn, status uint16, body string){
 	var response = Response{status, body}
 	responseResult, err := json.Marshal(response)
 	if err !=nil{
-		_logger.Fatalln("Response Result Json Error : ", body)
+		_logger.Warning("Response Result Json Error : ", body)
 	}
 	conn.Write(responseResult)
 }
@@ -204,7 +203,7 @@ func (server *Server) Response (conn net.Conn, status uint16, body string){
 func (server *Server) Work (request []byte) (string, error){
 	defer func(){
 		if err :=recover(); err !=nil {
-			_logger.Fatalln("Work Error: %s", err)
+			_logger.Warning("Work Error: %s", err)
 		}
 	}()
 	var body string
