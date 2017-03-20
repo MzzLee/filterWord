@@ -4,6 +4,8 @@ import (
 	"flag"
 	"github.com/larspensjo/config"
 	"log"
+	"fmt"
+	"sync"
 )
 
 type Conf struct {
@@ -13,13 +15,18 @@ type Conf struct {
 	Protocol string
 	Keyword string
 	Pid string
+	LogFile string
 }
 
-var _confInstance *Conf
+var (
+	_confInstance *Conf
+	_lock *sync.Mutex = &sync.Mutex{}
+)
 
 func (conf *Conf) Argv() *Conf {
 	conf.File      = *flag.String("c","conf/config.ini", "General configuration file")
-	conf.Keyword   = *flag.String("key","", "General configuration file")
+	conf.Keyword   = *flag.String("key","", "Sensitive word file")
+	conf.LogFile   = *flag.String("log","", "Log file")
 	flag.Parse()
 	return conf
 }
@@ -35,18 +42,25 @@ func (conf *Conf) Load() *Conf {
 
 	conf.Bind, _ 		= buffer.String("Server", "Bind")
 	conf.Port, _ 		= buffer.Int("Server", "Port")
-	conf.Protocol, _ 		= buffer.String("Server", "Protocol")
-	conf.Pid,_             = buffer.String("Server", "Pid")
+	conf.Protocol, _ 	= buffer.String("Server", "Protocol")
+	conf.Pid,_              = buffer.String("Server", "Pid")
 	if conf.Keyword == ""{
-		conf.Keyword, _ 	= buffer.String("Server", "Keyword")
+		conf.Keyword, _ = buffer.String("Server", "Keyword")
+	}
+	if conf.LogFile == ""{
+		conf.LogFile, _ = buffer.String("Server", "LogFile")
 	}
 
 	return conf
 }
 
-func ConfInstance() *Conf{
+func GetConfigInstance() *Conf{
 	if _confInstance == nil{
-		_confInstance = new(Conf).Load()
+		_lock.Lock()
+		defer _lock.Unlock()
+
+		_confInstance = new(Conf)
+		_confInstance.Load()
 	}
 	return _confInstance
 }

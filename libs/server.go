@@ -43,35 +43,24 @@ type Server struct {
 	Protocol string
 }
 
+var (
+	_serverInstance *Server
+	_logger * log.Logger
+)
 
-var _serverInstance *Server
-
-func Create(ac *Node, config *Conf) *Server{
+func CreateServer() *Server{
 	if _serverInstance == nil {
-
 		_serverInstance = new(Server)
-
-		if config.Port == 0 {
-			config.Port = DefaultPort
-		}
-
-		if config.Bind == ""{
-			config.Bind = _serverInstance.getRealIP()
-		}
-
-		_serverInstance.Ac = ac
-		_serverInstance.Host = config.Bind
-		_serverInstance.Port = config.Port
-		_serverInstance.Protocol = config.Protocol
+		_serverInstance.Init()
 	}
 
 	return _serverInstance
 }
 
-func (server *Server) getRealIP() string{
+func (server *Server) getRealIP () string{
 	ips, err :=  net.InterfaceAddrs()
 	if err != nil{
-		log.Fatalf("Error %s \n", err.Error())
+		_logger.Fatalln("Error %s \n", err.Error())
 		os.Exit(1)
 	}
 
@@ -85,10 +74,30 @@ func (server *Server) getRealIP() string{
 	return DefaultBind
 }
 
+func (server *Server) Init () *Server{
+	config := GetConfigInstance()
+	server.Ac = AcBuild(config.Keyword)
+	if config.Port == 0 {
+		config.Port = DefaultPort
+	}
+
+	if config.Bind == ""{
+		config.Bind = _serverInstance.getRealIP()
+	}
+
+	server.Host = config.Bind
+	server.Port = config.Port
+	server.Protocol = config.Protocol
+
+	_logger, _ = InitLogger(config.LogFile)
+	return server
+}
+
 func (server *Server) Start (){
 	listenFD, err := net.Listen(server.Protocol, server.Host + ":" + strconv.Itoa(server.Port))
 	if err !=nil {
-		log.Fatalf("Error %s \n", err.Error())
+		_logger.Fatalln(err.Error())
+		fmt.Println(err.Error())
 		os.Exit(1)
 	}
 
@@ -129,9 +138,10 @@ func (server *Server) receive (conn net.Conn){
 			}
 
 			if request.ContentLength == 0{
-				tmpBuffer, request = server.getHeader(tmpBuffer)
-				if request.ContentLength == 0 {
-					server.Response(conn, uint16(StatusRequestError), "")
+				tmpBuffer, request, err = server.getHeader(tmpBuffer)
+				if err != nil {
+					server.Response(conn, uint16(StatusRequestError), err.Error())
+					_logger.Println("Request Header Error", err.Error())
 					return
 				}
 			}
@@ -163,16 +173,22 @@ func (server *Server) receive (conn net.Conn){
 	return
 }
 
-func (server *Server) getHeader (tmpBuffer []byte) ([]byte, Request){
+func (server *Server) getHeader (tmpBuffer []byte) ([]byte, Request, error){
 	var request Request
 	if strings.HasPrefix(string(tmpBuffer), HeaderPrefix) {
 		suffix := strings.Index(string(tmpBuffer), HeaderSuffix)
 		if suffix > 0 {
-			json.Unmarshal(tmpBuffer[HeaderPrefixLen:suffix], &request)
+			err := json.Unmarshal(tmpBuffer[HeaderPrefixLen:suffix], &request)
+			if err != nil {
+				return nil, request, err
+			}
+			if request.ContentLength == 0 {
+				return nil, request, errors.New("Request Content Is Empty !")
+			}
 			tmpBuffer = tmpBuffer[suffix+HeaderSuffixLen:]
 		}
 	}
-	return tmpBuffer, request
+	return tmpBuffer, request, nil
 }
 
 
@@ -180,7 +196,7 @@ func (server *Server) Response (conn net.Conn, status uint16, body string){
 	var response = Response{status, body}
 	responseResult, err := json.Marshal(response)
 	if err !=nil{
-		log.Fatal("Response Result Json Error")
+		_logger.Fatalln("Response Result Json Error : ", body)
 	}
 	conn.Write(responseResult)
 }
@@ -188,7 +204,7 @@ func (server *Server) Response (conn net.Conn, status uint16, body string){
 func (server *Server) Work (request []byte) (string, error){
 	defer func(){
 		if err :=recover(); err !=nil {
-			log.Fatalf("Work Error: %s", err)
+			_logger.Fatalln("Work Error: %s", err)
 		}
 	}()
 	var body string
@@ -196,6 +212,6 @@ func (server *Server) Work (request []byte) (string, error){
 	if err == nil{
 		return server.Ac.AcFind(body), nil
 	}
-	return "", errors.New("Ac Found error")
+	return "", errors.New("Ac Found error" + body)
 }
 
