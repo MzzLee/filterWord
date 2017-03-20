@@ -23,7 +23,7 @@ const (
 	HeaderPrefixLen = 8
 	HeaderSuffix	= "[/header]"
 	HeaderSuffixLen = 9
-	ReaderMLen   	= 1024
+	ReaderMLen   	= 2048
 )
 
 type Request struct {

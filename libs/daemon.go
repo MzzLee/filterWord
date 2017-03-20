@@ -17,33 +17,43 @@ func (daemon *Daemon)Run() bool{
 	if os.Getppid() != 1 {
 
 		if len(os.Args) < 2 {
-			fmt.Println("Place input action For example : start|stop|restart")
+			fmt.Println("------------------------------------------------------------------")
+			fmt.Println("-- Please Input Parameters For Example : start | stop | restart --")
+			fmt.Println("------------------------------------------------------------------")
 			return false
 		}
 		pid, err := ioutil.ReadFile(daemon.Config.Pid)
 		switch os.Args[1] {
 		case "start":
 			if string(pid) != "" {
-				fmt.Println("Server already start !")
+				fmt.Println("------------------------------------------------------------------")
+				fmt.Println("------------         Server already start !           ------------")
+				fmt.Println("------------------------------------------------------------------")
 				return false
 			}
 
 		case "stop":
 			if err != nil || string(pid) == "" {
-				fmt.Println("Server not start !")
+				fmt.Println("------------------------------------------------------------------")
+				fmt.Println("---------------        Server not start !       ------------------")
+				fmt.Println("------------------------------------------------------------------")
 				return false
 			}
 			os.Remove(daemon.Config.Pid)
 			cmd := exec.Command("kill", "-9" , string(pid))
 			cmd.Start()
-			fmt.Println("Server stop!")
+			fmt.Println("------------------------------------------------------------------")
+			fmt.Println("--------------------       Server stop !        ------------------")
+			fmt.Println("------------------------------------------------------------------")
 			return false
 
 		case "restart":
 			cmd := exec.Command("kill", "-9" , string(pid))
 			cmd.Start()
 		default:
-			fmt.Println("Place input action For example : start|stop|restart")
+			fmt.Println("------------------------------------------------------------------")
+			fmt.Println("-- Please Input Parameters For Example : start | stop | restart --")
+			fmt.Println("------------------------------------------------------------------")
 			return false
 		}
 

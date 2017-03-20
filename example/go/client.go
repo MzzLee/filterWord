@@ -7,6 +7,7 @@ import (
 	"io"
 	"encoding/json"
 	"time"
+	"strconv"
 )
 
 var (
@@ -16,19 +17,22 @@ var (
 
 func main() {
 
-	conn, err := net.Dial("tcp", "127.0.0.1:9901")
+	for i:=0;i<50000;i++{
+		conn := Connect("127.0.0.1", 9901)
+		go Send(conn, "fuck day ! ")
+	}
+	time.Sleep(time.Second * 1)
+
+}
+
+func Connect(address string, port int) net.Conn{
+	conn, err := net.Dial("tcp", address + ":" + strconv.Itoa(port))
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Fatal error: %s", err.Error())
 		os.Exit(1)
 	}
-
-	fmt.Println("content success")
-	for i:=0;i<50000;i++{
-		go Send(conn)
-	}
-	time.Sleep(time.Second * 1)
-	conn.Close()
+	return conn
 }
 
 func Pack(body string, isAlive int) string{
@@ -45,9 +49,9 @@ func Pack(body string, isAlive int) string{
 	return HeaderPrefix + string(jsonHeader) + HeaderSuffix + string(jsonData)
 }
 
-func Send (conn net.Conn) {
+func Send (conn net.Conn,  content string) {
 
-	words :=Pack("fuck你妹的插暴王嘉龙对妹子抓胸triangleisteday", 0)
+	words :=Pack(content, 0)
 	io.WriteString(conn, words)
 	//start := time.Now().Unix()
 	var data  = make([]byte, 4096)
@@ -58,6 +62,7 @@ func Send (conn net.Conn) {
 		}
 		fmt.Println(string(data[:count]))
 	}
+	conn.Close()
 	//end := time.Now().Unix()
 	//fmt.Println(end-start)
 }

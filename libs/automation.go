@@ -14,6 +14,10 @@ type Node struct {
 	Count int
 }
 
+var (
+	REPLACE_WORD	   = []byte("*")
+)
+
 func (node *Node) Insert (keyword string){
 	var p *Node
 	p = node
@@ -103,9 +107,11 @@ func (node *Node) AcFind (context string) string {
 	buffer :=[]byte(context)
 	p := node
 	temp := new(Node)
-	replace := []byte("*")
 	var start int = 0
 	for index, value :=range buffer {
+		if IsIgnoreWord(uint16(value)){
+			continue
+		}
 		for{
 			if p.Child[uint16(value)] == nil && p != node {
 				p = p.Fail
@@ -126,7 +132,7 @@ func (node *Node) AcFind (context string) string {
 			}
 			if temp.Count >0{
 				for i:=start;i<=index;i++{
-					buffer[i] = replace[0]
+					buffer[i] = REPLACE_WORD[0]
 				}
 			}else{
 				break
@@ -135,6 +141,22 @@ func (node *Node) AcFind (context string) string {
 		}
 	}
 	return string(buffer)
+}
+
+func IsIgnoreWord(byte uint16) bool{
+	if byte < 48{
+		return true
+	}
+	if byte > 57 && byte < 65{
+		return true
+	}
+	if byte > 90 && byte < 97{
+		return true
+	}
+	if byte > 122 && byte < 128{
+		return true
+	}
+	return false
 }
 
 func CreateNewNode() *Node{
