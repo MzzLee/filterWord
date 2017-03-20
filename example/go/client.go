@@ -18,7 +18,7 @@ var (
 func main() {
 
 	for i:=0;i<50000;i++{
-		conn := Connect("127.0.0.1", 9901)
+		conn := Connect("127.0.0.1", 8821)
 		go Send(conn, "fuck day ! ")
 	}
 	time.Sleep(time.Second * 1)
