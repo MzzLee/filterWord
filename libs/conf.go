@@ -64,9 +64,10 @@ func GetConfigInstance() *Conf{
 	if _confInstance == nil{
 		_lock.Lock()
 		defer _lock.Unlock()
-
-		_confInstance = new(Conf)
-		_confInstance.Load()
+		if _confInstance == nil {
+			_confInstance = new(Conf)
+			_confInstance.Load()
+		}
 	}
 	return _confInstance
 }

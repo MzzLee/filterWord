@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"time"
 )
 const (
 	StatusOK = 200
@@ -18,16 +18,22 @@ const (
 const (
 	DefaultPort 	= 9901
 	DefaultBind  	= "127.0.0.1"
-	HeaderPrefix 	= "[header]"
-	HeaderPrefixLen = 8
-	HeaderSuffix	= "[/header]"
-	HeaderSuffixLen = 9
-	ReaderMLen   	= 2048
+	HeaderPrefix 	= "[HDR]"
+	HeaderPrefixLen = 5
+	HeaderSuffix	= "[/HDR]"
+	HeaderSuffixLen = 6
+	ReaderMLen   	= 1024
+	ResponseEOF     = byte(13)
 )
+
+type Package struct {
+	Request *Request
+	Content []byte
+}
 
 type Request struct {
 	ContentLength int `json:"content-length"`
-	IsAlive int `json:"is-alive"`
+	KeepAlive int `json:"keep-alive"`
 }
 
 type Response struct{
@@ -113,104 +119,165 @@ func (server *Server) Start (){
 	}
 }
 
-func (server *Server) receive (conn net.Conn){
-	tmpBuffer := make([]byte, 0)
+func (server *Server) receive (conn net.Conn) {
 
-	defer conn.Close()
+	tmpBuffer 	:= make([]byte, 0)
+	readBuffer 	:= make([]byte, ReaderMLen)
+	workChannel	:= make(chan []byte)
+	request    	:= Request{0,0}
+	headerStatus 	:= false
+	pack   		:= Package{}
+	isAlive		:= 0
 
-	readBuffer := make([]byte, ReaderMLen)
-	request    := Request{0,0}
-
+	defer func(){
+		time.Sleep(time.Millisecond)
+		conn.Close()
+	}()
 
 	for {
 		n, err := conn.Read(readBuffer)
-		if err != nil || err == io.EOF {
+		if err != nil {
 			return
 		}
 
 		tmpBuffer = append(tmpBuffer, readBuffer[:n]...)
-
-		var sendBuffer []byte
 		for {
 			if len(tmpBuffer) == 0 {
 				break
 			}
 
-			if request.ContentLength == 0{
+			go server.Work(conn, workChannel)
+
+			//获取头文件
+			if headerStatus == false {
 				tmpBuffer, request, err = server.getHeader(tmpBuffer)
+				pack.Request = &request
 				if err != nil {
-					server.Response(conn, uint16(StatusRequestError), err.Error())
 					_logger.Warning("Request Header Error : ", err.Error())
-					return
+					if isAlive == 0{
+						workBuffer,_ := json.Marshal(pack)
+						workChannel <- workBuffer
+						return
+					}else{
+						break
+					}
+				}else{
+					isAlive = request.KeepAlive
+					headerStatus = true
 				}
 			}
 
-			if request.ContentLength > 0 && len(tmpBuffer) >= request.ContentLength{
-
-				responseStatus := StatusOK
-				sendBuffer = tmpBuffer[0:request.ContentLength]
-
-				tmpBuffer  = tmpBuffer[request.ContentLength:]
-				responseBody, err := server.Work(sendBuffer)
-				if err != nil {
-					responseStatus = StatusRequestError
-				}
-
-				server.Response(conn, uint16(responseStatus), responseBody)
-				if request.IsAlive > 0 {
-					request.ContentLength = 0
+			//获取内容体
+			if headerStatus {
+				if request.ContentLength <= 0 {
+					workBuffer,_ := json.Marshal(pack)
+					workChannel <- workBuffer
+					if request.KeepAlive == 0 {
+						return
+					}else{
+						headerStatus = false
+					}
 				}else{
-					return
-				}
+					if len(tmpBuffer) >= request.ContentLength {
 
+						pack.Content = tmpBuffer[0:request.ContentLength]
+						tmpBuffer    = tmpBuffer[request.ContentLength:]
+						workBuffer,_ := json.Marshal(pack)
+						workChannel <- workBuffer
+
+						if request.KeepAlive == 0 {
+							return
+						}else{
+							headerStatus = false
+
+
+						}
+					}else{
+						break
+					}
+				}
 			}else{
 				break
 			}
 
 		}
 	}
+
 	return
+}
+
+func (server *Server) HeartBeating(conn net.Conn, readerChannel chan []byte, timeout int) {
+	select {
+	case fk := <-readerChannel:
+		_logger.Trace("Request Heart Beating from ",conn.RemoteAddr().String(), string(fk))
+		conn.SetDeadline(time.Now().Add(time.Duration(timeout) * time.Second))
+		break
+	case <-time.After(time.Second * 5):
+		conn.Close()
+	}
+}
+
+func (server *Server) GravelChannel(readBuffer []byte, readerChannel chan []byte) {
+	readerChannel <- readBuffer
 }
 
 func (server *Server) getHeader (tmpBuffer []byte) ([]byte, Request, error){
 	var request Request
-	if strings.HasPrefix(string(tmpBuffer), HeaderPrefix) {
+	if prefix :=strings.Index(string(tmpBuffer), HeaderPrefix); prefix >= 0 {
+		if prefix > 0 {
+			tmpBuffer = tmpBuffer[prefix:]
+			prefix = 0
+		}
 		suffix := strings.Index(string(tmpBuffer), HeaderSuffix)
 		if suffix > 0 {
-			err := json.Unmarshal(tmpBuffer[HeaderPrefixLen:suffix], &request)
+			err := json.Unmarshal(tmpBuffer[prefix + HeaderPrefixLen : suffix], &request)
 			if err != nil {
 				return nil, request, err
 			}
-			if request.ContentLength == 0 {
-				return nil, request, errors.New("Request Content Is Empty !")
-			}
-			tmpBuffer = tmpBuffer[suffix+HeaderSuffixLen:]
+			tmpBuffer = tmpBuffer[suffix + HeaderSuffixLen:]
+			return tmpBuffer, request, nil
 		}
 	}
-	return tmpBuffer, request, nil
+	return tmpBuffer, request, errors.New("Parse Header Error !")
 }
 
 
 func (server *Server) Response (conn net.Conn, status uint16, body string){
-	var response = Response{status, body}
+	response := Response{status, body}
 	responseResult, err := json.Marshal(response)
+	responseResult = append(responseResult, ResponseEOF)
 	if err !=nil{
 		_logger.Warning("Response Result Json Error : ", body)
 	}
-	conn.Write(responseResult)
+	_, err = conn.Write(responseResult)
+	if err != nil {
+		_logger.Warning(err.Error())
+	}
+
 }
 
-func (server *Server) Work (request []byte) (string, error){
+func (server *Server) Work (conn net.Conn, workChannel chan []byte) (error){
+
+	var responseStatus uint16
+	var responseBody string
+
 	defer func(){
 		if err :=recover(); err !=nil {
 			_logger.Warning("Work Error: %s", err)
 		}
 	}()
-	var body string
-	err := json.Unmarshal(request, &body)
-	if err == nil{
-		return server.Ac.AcFind(body), nil
+	responseStatus = uint16(StatusOK)
+	select {
+	case work := <- workChannel:
+		var pack Package
+		err := json.Unmarshal(work, &pack)
+		if err != nil && pack.Request.ContentLength > 0 {
+			responseBody = server.Ac.AcFind(pack.Content)
+		}else{
+			responseStatus = uint16(StatusRequestError)
+		}
+		server.Response(conn, responseStatus, responseBody)
 	}
-	return "", errors.New("Ac Found error" + body)
+	return errors.New("Request Empty!" )
 }
 

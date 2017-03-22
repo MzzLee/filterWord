@@ -6,22 +6,27 @@ import (
 	"os"
 	"io"
 	"encoding/json"
-	"time"
 	"strconv"
+	"time"
 )
 
 var (
-	HeaderPrefix = "[header]"
-	HeaderSuffix = "[/header]"
+	HeaderPrefix = "[HDR]"
+	HeaderSuffix = "[/HDR]"
 )
 
 func main() {
-
-	for i:=0;i<50000;i++{
-		conn := Connect("127.0.0.1", 8821)
-		go Send(conn, "fuck day ! ")
+	start := time.Now().Unix()
+	conn := Connect("127.0.0.1", 8821)
+	for i:=0;i<10;i++ {
+		Send(conn, "nimeiafuck消息队列等待你888流浪者" + strconv.Itoa(i))
+		//fmt.Println("send success!")
+		//time.Sleep(1 * time.Second)
 	}
-	time.Sleep(time.Second * 1)
+	end := time.Now().Unix()
+	fmt.Println(end-start)
+	time.Sleep(1 * time.Second)
+
 
 }
 
@@ -35,34 +40,40 @@ func Connect(address string, port int) net.Conn{
 	return conn
 }
 
-func Pack(body string, isAlive int) string{
-	jsonData, err := json.Marshal(body)
-
+func Pack(body string, keepAlive int) string{
 	header := make(map[string]int)
-	header["content-length"] = len(string(jsonData))
-	header["is-alive"] = isAlive
+	header["content-length"] = len(body)
+	header["keep-alive"] = keepAlive
 	jsonHeader, err :=json.Marshal(header)
 	if err != nil{
 		fmt.Println("Json encode Error : ", err.Error())
 		return HeaderPrefix + "0" + HeaderSuffix
 	}
-	return HeaderPrefix + string(jsonHeader) + HeaderSuffix + string(jsonData)
+	return HeaderPrefix + string(jsonHeader) + HeaderSuffix + body
 }
 
 func Send (conn net.Conn,  content string) {
 
-	words :=Pack(content, 0)
+	words :=Pack(content, 1)
 	io.WriteString(conn, words)
-	//start := time.Now().Unix()
-	var data  = make([]byte, 4096)
+	data  := make([]byte, 4096)
+	tmpBuffer  := make([]byte, 0)
+	i := 0
 	for {
-		count, err := conn.Read(data)
+		n, err := conn.Read(data)
 		if err != nil {
 			break
 		}
-		fmt.Println(string(data[:count]))
+		tmpBuffer = append(tmpBuffer, data[:n]...)
+		for _, v := range tmpBuffer{
+			if v != 13{
+				i++
+			}else{
+				fmt.Println(string(tmpBuffer[0:i]))
+				return
+			}
+		}
 	}
-	conn.Close()
-	//end := time.Now().Unix()
-	//fmt.Println(end-start)
+
+	//conn.Close()
 }

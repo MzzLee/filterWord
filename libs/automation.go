@@ -103,8 +103,7 @@ func (node *Node) BuildAcAutomation (){
 
 }
 
-func (node *Node) AcFind (context string) string {
-	buffer :=[]byte(context)
+func (node *Node) AcFind (buffer []byte) string {
 	p := node
 	temp := new(Node)
 	var start int = 0
