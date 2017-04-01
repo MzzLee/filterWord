@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"crypto/md5"
+	"encoding/hex"
 )
 const (
 	StatusOK = 200
@@ -16,7 +18,7 @@ const (
 )
 
 const (
-	DefaultPort 	= 9901
+	DefaultPort 	= 8821
 	DefaultBind  	= "127.0.0.1"
 	HeaderPrefix 	= "[HDR]"
 	HeaderPrefixLen = 5
@@ -34,10 +36,14 @@ type Package struct {
 type Request struct {
 	ContentLength int `json:"content-length"`
 	KeepAlive int `json:"keep-alive"`
+	Date int `json:"date"`
+	Token string `json:"token"`
 }
 
 type Response struct{
 	Status uint16 `json:"status"`
+	Date int `json:"date"`
+	Token string `json:"token"`
 	Body string `json:"body"`
 }
 
@@ -124,7 +130,7 @@ func (server *Server) receive (conn net.Conn) {
 	tmpBuffer 	:= make([]byte, 0)
 	readBuffer 	:= make([]byte, ReaderMLen)
 	workChannel	:= make(chan []byte)
-	request    	:= Request{0,0}
+	request    	:= *new(Request)
 	headerStatus 	:= false
 	pack   		:= Package{}
 	isAlive		:= 0
@@ -166,7 +172,6 @@ func (server *Server) receive (conn net.Conn) {
 					headerStatus = true
 				}
 			}
-
 			//获取内容体
 			if headerStatus {
 				if request.ContentLength <= 0 {
@@ -242,8 +247,17 @@ func (server *Server) getHeader (tmpBuffer []byte) ([]byte, Request, error){
 }
 
 
-func (server *Server) Response (conn net.Conn, status uint16, body string){
-	response := Response{status, body}
+func (server *Server) Response (conn net.Conn, status uint16, body string, date int, token string){
+
+	if date == 0 {
+		date = int(time.Now().Unix())
+	}
+	if token == "" {
+		cert := md5.New()
+		cert.Write([]byte(strconv.Itoa(date)))
+		token = hex.EncodeToString(cert.Sum(nil))
+	}
+	response := Response{status, date, token, body}
 	responseResult, err := json.Marshal(response)
 	responseResult = append(responseResult, ResponseEOF)
 	if err !=nil{
@@ -271,12 +285,12 @@ func (server *Server) Work (conn net.Conn, workChannel chan []byte) (error){
 	case work := <- workChannel:
 		var pack Package
 		err := json.Unmarshal(work, &pack)
-		if err != nil && pack.Request.ContentLength > 0 {
+		if err == nil && pack.Request.ContentLength > 0 {
 			responseBody = server.Ac.AcFind(pack.Content)
 		}else{
 			responseStatus = uint16(StatusRequestError)
 		}
-		server.Response(conn, responseStatus, responseBody)
+		server.Response(conn, responseStatus, responseBody, pack.Request.Date, pack.Request.Token)
 	}
 	return errors.New("Request Empty!" )
 }

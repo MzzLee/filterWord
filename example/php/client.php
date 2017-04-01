@@ -4,6 +4,8 @@ function go_pack($string){
 	    $header = json_encode([
 	        "content-length" => strlen($string),
 	        "is-alive" => 0,
+//	        "date" => time(),
+//		"token" => md5(time()),
 	    ]);
 		return "[HDR]" . $header. "[/HDR]". $string;
 }

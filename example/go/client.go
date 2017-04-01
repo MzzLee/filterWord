@@ -15,6 +15,14 @@ var (
 	HeaderSuffix = "[/HDR]"
 )
 
+type Request struct {
+	ContentLength int `json:"content-length"`
+	KeepAlive int `json:"keep-alive"`
+	Date int `json:"date"`
+	Token string `json:"token"`
+}
+
+
 func main() {
 	start := time.Now().Unix()
 	conn := Connect("127.0.0.1", 8821)
@@ -41,9 +49,11 @@ func Connect(address string, port int) net.Conn{
 }
 
 func Pack(body string, keepAlive int) string{
-	header := make(map[string]int)
-	header["content-length"] = len(body)
-	header["keep-alive"] = keepAlive
+	header := new(Request)
+	header.ContentLength = len(body)
+	header.KeepAlive = keepAlive
+	header.Date = int(time.Now().Unix())
+	header.Token = "skal90sd891nica923knca"
 	jsonHeader, err :=json.Marshal(header)
 	if err != nil{
 		fmt.Println("Json encode Error : ", err.Error())
